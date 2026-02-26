@@ -1,3 +1,5 @@
+import AskAIPage from "./AskAIPage";
+
 import { Menu } from "lucide-react";
 import {
   Sheet,
@@ -15,7 +17,7 @@ function formatDate(d) {
   });
 }
 
-
+import { MessageCircle } from "lucide-react";
 import {
   LayoutDashboard,
   Newspaper,
@@ -68,6 +70,8 @@ const DUMMY_SOURCES = [
 
 const DUMMY_ARTICLES = [
   {
+
+
     id: "a1",
     title: "Global markets react to new inflation data",
     source: "Reuters",
@@ -202,6 +206,7 @@ const [selectedTags, setSelectedTags] = useState(new Set());
 const [onlyDuplicates, setOnlyDuplicates] = useState(false);
 const [onlyUnique, setOnlyUnique] = useState(false);
 const [onlyTopRanked, setOnlyTopRanked] = useState(false);
+const [totalFetched, setTotalFetched] = useState(0);
 
 const [filtersOpen, setFiltersOpen] = useState(false);
 const CATEGORY_OPTIONS = ["Tech", "World", "Business", "Security", "Sports"];
@@ -230,6 +235,8 @@ const [executiveSummary, setExecutiveSummary] = useState("");
 const [deepSummaries, setDeepSummaries] = useState({});
 const [deepLoading, setDeepLoading] = useState({});
 const [darkMode, setDarkMode] = useState(false);
+const [sourceHealth, setSourceHealth] = useState({});
+const [testingSource, setTestingSource] = useState(null);
 
 useEffect(() => {
   const root = document.documentElement;
@@ -413,6 +420,7 @@ console.log("Agent response:", data);
 
 setExecutiveSummary(data.executive_summary || "");
 setArticles(data.articles || []);
+setTotalFetched(data.total_fetched || 0);;
 setSelectedTopIds(new Set()); // reset top 5 selection
 setSearch(""); // reset search
  setDeepSummaries({});
@@ -425,6 +433,80 @@ setActivePage("stories");
     setAgentRunning(false);
     alert("Backend error. Is FastAPI running on port 8000?");
   }
+}
+
+// export working
+
+// ✅ PASTE THIS RIGHT HERE
+async function exportStories() {
+  const selected = articles.filter(a =>
+    selectedTopIds.has(a.id)
+  );
+
+  const res = await fetch("http://127.0.0.1:8000/agent/export/email", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      executive_summary: executiveSummary,
+      articles: selected
+    })
+  });
+
+  const data = await res.json();
+
+  const newWindow = window.open();
+  newWindow.document.write(data.html);
+}
+// csv 
+async function exportHistory() {
+  const res = await fetch("http://127.0.0.1:8000/agent/export/csv", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      articles: articles
+    })
+  });
+
+  const blob = await res.blob();
+  const url = window.URL.createObjectURL(blob);
+
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "history_export.csv";
+  a.click();
+}
+
+// test source health 
+async function testSource(sourceName) {
+  setTestingSource(sourceName);
+
+  try {
+    const res = await fetch("http://127.0.0.1:8000/agent/test-source", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        source_name: sourceName,
+      }),
+    });
+
+    const data = await res.json();
+
+    setSourceHealth(prev => ({
+      ...prev,
+      [sourceName]: {
+        ...data,
+        last_checked: new Date().toLocaleTimeString()
+      }
+    }));
+
+  } catch (err) {
+    setSourceHealth(prev => ({
+      ...prev,
+      [sourceName]: { status: "failed" }
+    }));
+  }
+
+  setTestingSource(null);
 }
 
 
@@ -459,12 +541,12 @@ function SidebarContent() {
           active={activePage === "stories"}
           onClick={() => setActivePage("stories")}
         />
-        <SidebarItem
+        {/* <SidebarItem
           icon={Mail}
           label="Email Preview"
           active={activePage === "email"}
           onClick={() => setActivePage("email")}
-        />
+        /> */}
         <SidebarItem
           icon={Globe}
           label="Sources"
@@ -477,6 +559,12 @@ function SidebarContent() {
           active={activePage === "history"}
           onClick={() => setActivePage("history")}
         />
+        <SidebarItem
+  icon={MessageCircle}
+  label="Ask AI"
+  active={activePage === "ask"}
+  onClick={() => setActivePage("ask")}
+/>
       </div>
 
       <Separator className="my-4" />
@@ -536,7 +624,7 @@ function SidebarContent() {
   <Button
     variant="outline"
     className="h-10 rounded-xl border-border bg-background/60 px-4 text-foreground shadow-sm backdrop-blur-md hover:bg-accent"
-   
+     onClick={exportStories}
   >
     Export
   </Button>
@@ -641,7 +729,7 @@ function SidebarContent() {
                             </div>
 
                             <div className="flex items-center gap-2">
-                              {statusBadge(s.status)}
+                              {statusBadge(sourceHealth[s.name]?.status || s.status)}
                               <Checkbox
                                 checked={selectedSourceIds.has(s.id)}
                                 onCheckedChange={() => toggleSource(s.id)}
@@ -671,7 +759,7 @@ function SidebarContent() {
                           <li>Collecting sources…</li>
                           <li>Extracting articles…</li>
                           <li>Deduplicating…</li>
-                          <li>Summarizing with Gemini…</li>
+                          <li>Summarizing with OpenAI…</li>
                           <li>Ranking top stories…</li>
                         </ul>
                       </div>
@@ -686,12 +774,30 @@ function SidebarContent() {
                 {/* Executive summary */}
                 <Card className="lg:col-span-2 rounded-2xl ">
                   <CardHeader>
-                    <CardTitle className="text-base">Executive Summary</CardTitle>
+                    <CardTitle className="text-lg font-bold tracking-tight">Executive Summary</CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <p className="whitespace-pre-line text-sm leading-relaxed text-muted-foreground">
-                      {executiveSummary.trim()}
-                    </p>
+                  <div className="mt-2 space-y-3">
+
+  {executiveSummary
+    ?.split("\n")
+    .filter(line => line.trim() !== "")
+    .map((line, i) => (
+      <div
+        key={i}
+        className="flex items-start gap-3 rounded-lg bg-muted/30 px-3 py-2 border border-border/40 hover:bg-muted/40 transition-colors"
+
+      >
+        <div className="mt-[6px] h-2 w-2 rounded-full bg-primary"></div>
+
+        <p className="text-sm leading-6 text-foreground font-medium">
+          {line.replace(/^-/, "").trim()}
+        </p>
+
+      </div>
+  ))}
+
+</div>
 
                     <Separator className="my-4" />
 
@@ -700,7 +806,7 @@ function SidebarContent() {
 
                         <CardContent className="p-4">
                           <p className="text-xs text-muted-foreground">Articles Fetched</p>
-                          <p className="mt-1 text-2xl font-semibold">{articles.length}</p>
+                          <p className="mt-1 text-2xl font-semibold">{totalFetched}</p>
 
                         </CardContent>
                       </Card>
@@ -732,298 +838,369 @@ function SidebarContent() {
             </PageShell>
           ) : null}
 
-          {activePage === "stories" ? (
-            <PageShell
-              title="Stories"
-              subtitle="Browse stories, group duplicates, and select your top 5 for email delivery."
-              rightActions={
-               <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+{activePage === "stories" ? (
+  <PageShell
+    title="Stories"
+    subtitle="Browse stories, group duplicates, and select your top 5 for email delivery."
+  >
 
-                  <div className="relative">
-                    <Search className="absolute left-3 top-2.5 text-muted-foreground" size={16} />
-                    <Input
-                      value={search}
-                      onChange={(e) => setSearch(e.target.value)}
-                      placeholder="Search stories..."
-                     className="pl-9 w-full sm:w-[260px] rounded-xl"
+    {/* ========================= */}
+    {/* 🔥 STICKY SECOND HEADER */}
+    {/* ========================= */}
+    <div className="sticky top-16 z-40 bg-background border-b border-border pb-4 pt-2">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
 
+        {/* LEFT SIDE */}
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+
+          {/* Search */}
+          <div className="relative">
+            <Search
+              className="absolute left-3 top-2.5 text-muted-foreground"
+              size={16}
+            />
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search stories..."
+              className="pl-9 w-full sm:w-[260px] rounded-xl"
+            />
+          </div>
+
+          {/* Filters */}
+          <Sheet open={filtersOpen} onOpenChange={setFiltersOpen}>
+            <SheetTrigger asChild>
+              <Button
+                variant="outline"
+                className="rounded-xl border-white/20 bg-white/60 backdrop-blur-md hover:bg-white/80 dark:bg-white/5 dark:hover:bg-white/10 dark:border-white/10"
+              >
+                <Filter size={16} className="mr-2" />
+                Filters
+              </Button>
+            </SheetTrigger>
+
+            <SheetContent side="right" className="w-[380px] p-0">
+              <div className="h-full p-5">
+                <div className="glass-panel rounded-2xl p-5 h-full overflow-auto thin-scrollbar">
+
+                  <div className="flex items-center justify-between">
+                    <p className="text-base font-semibold">Filters</p>
+                    <Button
+                      variant="ghost"
+                      className="rounded-xl"
+                      onClick={clearAllFilters}
+                    >
+                      Clear all
+                    </Button>
+                  </div>
+
+                  <Separator className="my-4" />
+
+                  {/* Sort */}
+                  <div>
+                    <p className="text-sm font-medium">Sort by time</p>
+                    <div className="mt-2 flex gap-2">
+                      <Button
+                        variant={sortOrder === "newest" ? "default" : "outline"}
+                        className="rounded-xl"
+                        onClick={() => setSortOrder("newest")}
+                      >
+                        Newest
+                      </Button>
+                      <Button
+                        variant={sortOrder === "oldest" ? "default" : "outline"}
+                        className="rounded-xl"
+                        onClick={() => setSortOrder("oldest")}
+                      >
+                        Oldest
+                      </Button>
+                    </div>
+                  </div>
+
+                  <Separator className="my-4" />
+
+                  {/* Category */}
+                  <div>
+                    <p className="text-sm font-medium">Category</p>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {CATEGORY_OPTIONS.map((c) => {
+                        const active = selectedCategories.has(c);
+                        return (
+                          <Button
+                            key={c}
+                            variant={active ? "default" : "outline"}
+                            className="rounded-xl"
+                            onClick={() =>
+                              toggleSetValue(setSelectedCategories, c)
+                            }
+                          >
+                            {c}
+                          </Button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <Separator className="my-4" />
+
+                  {/* Sources */}
+                  <div>
+                    <p className="text-sm font-medium">Sources</p>
+                    <div className="mt-3 space-y-2">
+                      {selectedSources.map((s) => (
+                        <div
+                          key={s.id}
+                          className="flex items-center justify-between rounded-xl border border-white/10 px-3 py-2"
+                        >
+                          <p className="text-sm">{s.name}</p>
+                          <Checkbox
+                            checked={selectedFilterSources.has(s.name)}
+                            onCheckedChange={() =>
+                              toggleSetValue(setSelectedFilterSources, s.name)
+                            }
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <Separator className="my-4" />
+
+                  {/* Duplicate */}
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <p className="text-sm font-medium">Show only duplicates</p>
+                      <Switch
+                        checked={onlyDuplicates}
+                        onCheckedChange={setOnlyDuplicates}
+                      />
+                    </div>
+
+                    <div className="flex items-center justify-between">
+                      <p className="text-sm font-medium">Show only unique</p>
+                      <Switch
+                        checked={onlyUnique}
+                        onCheckedChange={setOnlyUnique}
+                      />
+                    </div>
+                  </div>
+
+                  <Separator className="my-4" />
+
+                  {/* Tags */}
+                  {/* <div>
+                    <p className="text-sm font-medium">Tags</p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Select tags to narrow down stories.
+                    </p>
+
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {TAG_OPTIONS.map((t) => {
+                        const active = selectedTags.has(t);
+                        return (
+                          <Button
+                            key={t}
+                            variant={active ? "default" : "outline"}
+                            className="rounded-xl"
+                            onClick={() =>
+                              toggleSetValue(setSelectedTags, t)
+                            }
+                          >
+                            {t}
+                          </Button>
+                        );
+                      })}
+                    </div>
+                  </div> */}
+
+                  <Separator className="my-4" />
+
+                  {/* Top Ranked */}
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium">Only Top Ranked</p>
+                      <p className="text-xs text-muted-foreground">
+                        Show top 10 stories only
+                      </p>
+                    </div>
+                    <Switch
+                      checked={onlyTopRanked}
+                      onCheckedChange={setOnlyTopRanked}
                     />
                   </div>
-                  <Sheet open={filtersOpen} onOpenChange={setFiltersOpen}>
-  <SheetTrigger asChild>
-    <Button
-      variant="outline"
-      className="rounded-xl border-white/20 bg-white/60 backdrop-blur-md hover:bg-white/80 dark:bg-white/5 dark:hover:bg-white/10 dark:border-white/10"
-    >
-      <Filter size={16} className="mr-2" />
-      Filters
-    </Button>
-  </SheetTrigger>
 
-  <SheetContent side="right" className="w-[380px] p-0">
-    <div className="h-full p-5">
-      <div className="glass-panel rounded-2xl p-5 h-full overflow-auto">
-        <div className="flex items-center justify-between">
-          <p className="text-base font-semibold">Filters</p>
-
-          <Button
-            variant="ghost"
-            className="rounded-xl"
-            onClick={clearAllFilters}
-          >
-            Clear all
-          </Button>
-        </div>
-
-        <Separator className="my-4" />
-
-        {/* Sort */}
-        <div>
-          <p className="text-sm font-medium">Sort by time</p>
-          <div className="mt-2 flex gap-2">
-            <Button
-              variant={sortOrder === "newest" ? "default" : "outline"}
-              className="rounded-xl"
-              onClick={() => setSortOrder("newest")}
-            >
-              Newest
-            </Button>
-            <Button
-              variant={sortOrder === "oldest" ? "default" : "outline"}
-              className="rounded-xl"
-              onClick={() => setSortOrder("oldest")}
-            >
-              Oldest
-            </Button>
-          </div>
-        </div>
-
-        <Separator className="my-4" />
-
-        {/* Category */}
-        <div>
-          <p className="text-sm font-medium">Category</p>
-          <div className="mt-3 flex flex-wrap gap-2">
-            {CATEGORY_OPTIONS.map((c) => {
-              const active = selectedCategories.has(c);
-              return (
-                <Button
-                  key={c}
-                  variant={active ? "default" : "outline"}
-                  className="rounded-xl"
-                  onClick={() => toggleSetValue(setSelectedCategories, c)}
-                >
-                  {c}
-                </Button>
-              );
-            })}
-          </div>
-        </div>
-
-        <Separator className="my-4" />
-
-        {/* Sources */}
-        <div>
-          <p className="text-sm font-medium">Sources</p>
-          <div className="mt-3 space-y-2">
-            {selectedSources.map((s) => (
-              <div
-                key={s.id}
-                className="flex items-center justify-between rounded-xl border border-white/10 px-3 py-2"
-              >
-                <p className="text-sm">{s.name}</p>
-                <Checkbox
-                  checked={selectedFilterSources.has(s.name)}
-                  onCheckedChange={() =>
-                    toggleSetValue(setSelectedFilterSources, s.name)
-                  }
-                />
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <Separator className="my-4" />
-
-        {/* Duplicate toggles */}
-        <div className="space-y-3">
-          <div className="flex items-center justify-between">
-            <p className="text-sm font-medium">Show only duplicates</p>
-            <Switch checked={onlyDuplicates} onCheckedChange={setOnlyDuplicates} />
-          </div>
-
-          <div className="flex items-center justify-between">
-            <p className="text-sm font-medium">Show only unique</p>
-            <Switch checked={onlyUnique} onCheckedChange={setOnlyUnique} />
-          </div>
-        </div>
-
-        <Separator className="my-4" />
-
-        {/* Tags */}
-        <div>
-          <p className="text-sm font-medium">Tags</p>
-          <p className="text-xs text-muted-foreground mt-1">
-            Select tags to narrow down stories.
-          </p>
-
-          <div className="mt-3 flex flex-wrap gap-2">
-            {TAG_OPTIONS.map((t) => {
-              const active = selectedTags.has(t);
-              return (
-                <Button
-                  key={t}
-                  variant={active ? "default" : "outline"}
-                  className="rounded-xl"
-                  onClick={() => toggleSetValue(setSelectedTags, t)}
-                >
-                  {t}
-                </Button>
-              );
-            })}
-          </div>
-        </div>
-
-        <Separator className="my-4" />
-
-        {/* Top ranked */}
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-sm font-medium">Only Top Ranked</p>
-            <p className="text-xs text-muted-foreground">
-              Show top 10 stories only
-            </p>
-          </div>
-          <Switch checked={onlyTopRanked} onCheckedChange={setOnlyTopRanked} />
-        </div>
-      </div>
-    </div>
-  </SheetContent>
-</Sheet>
-
-                  <Button
-                    className="rounded-xl"
-                    onClick={() => setActivePage("email")}
-                    disabled={selectedTopIds.size === 0}
-                  >
-                    Email Preview
-                    <ChevronRight className="ml-2" size={18} />
-                  </Button>
                 </div>
-              }
-            >
-              <div className="grid grid-cols-1 gap-4">
-                {filteredArticles.map((a) => {
-                  const selected = selectedTopIds.has(a.id);
+              </div>
+            </SheetContent>
+          </Sheet>
+        </div>
 
-                  return (
-                    <Card key={a.id} className="rounded-2xl">
-                      <CardContent className="p-5">
-                        <div className="flex items-start justify-between gap-4">
-                          <div className="min-w-0">
-                            <div className="flex flex-wrap items-center gap-2">
-                              <h3 className="truncate text-base font-semibold">
-                                {a.title}
-                              </h3>
-
-                              {a.isDuplicateGroup ? (
-                                <Badge variant="secondary">
-                                  Covered by {a.coverageCount} sources
-                                </Badge>
-                              ) : null}
-                            </div>
-
-                            <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                              <span>{a.source}</span>
-                              <span>•</span>
-                              <span>{new Date(a.publishedAt).toLocaleString()}</span>
-                            </div>
-<p className="mt-3 text-sm text-muted-foreground">
-  {a.summary}
-</p>
-
-<div className="mt-4">
-  <Button
-    variant="outline"
-    className="rounded-xl border-border bg-background text-foreground hover:bg-accent"
-    onClick={() => generateDeepSummary(a)}
-    disabled={deepLoading[a.id]}
-  >
-    {deepLoading[a.id] ? "Generating..." : "Deep Summary"}
-  </Button>
-
-  {deepSummaries[a.id] ? (
-    <div className="mt-4 rounded-2xl border border-border bg-white/70 p-5 shadow-sm backdrop-blur-md dark:bg-white/5">
-      {/* Header Row */}
-      <div className="mb-3 flex items-center justify-between">
-        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-          Executive Brief
-        </p>
-
-        <span className="text-xs text-slate-400 dark:text-slate-500">
-          Gemini
-        </span>
+        {/* Email Button */}
+        {/* <Button
+          className="rounded-xl"
+          onClick={() => setActivePage("email")}
+          disabled={selectedTopIds.size === 0}
+        >
+          Email Preview
+          <ChevronRight className="ml-2" size={18} />
+        </Button> */}
       </div>
-
-      {/* Summary Text */}
-      <p
-  className={`whitespace-pre-line text-sm leading-relaxed ${
-    deepSummaries[a.id].toLowerCase().includes("could not extract")
-      ? "text-red-500 dark:text-red-400"
-      : "text-slate-700 dark:text-slate-200"
-  }`}
->
-  {deepSummaries[a.id]}
-</p>
-
     </div>
-  ) : null}
+
+    {/* ========================= */}
+    {/* 🔥 SCROLLABLE STORIES */}
+    {/* ========================= */}
+    <div className="max-h-[calc(100vh-220px)] overflow-y-auto thin-scrollbar pr-2">
+      <div className="grid grid-cols-1 gap-4 pt-4">
+
+        {filteredArticles.map((a) => {
+          const selected = selectedTopIds.has(a.id);
+
+          return (
+            <Card key={a.id} className="rounded-2xl">
+              <CardContent className="p-5">
+                <div className="flex items-start justify-between gap-4">
+
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h3 className="truncate text-base font-semibold">
+                        {a.title}
+                      </h3>
+
+                      {a.isDuplicateGroup && (
+                        <Badge variant="secondary">
+                          Covered by {a.coverageCount} sources
+                        </Badge>
+                      )}
+                    </div>
+
+                    <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+  <span>{a.source}</span>
+
+  <span>•</span>
+  <span >
+    {a.reading_time || "1 min read"}
+  </span>
+
+  <span>•</span>
+  <span>{new Date(a.publishedAt).toLocaleString()}</span>
 </div>
 
+                    <p className="mt-3 text-sm text-muted-foreground">
+                      {a.summary}
+                    </p>
 
+                    {/* 🔥 Deep Summary (Working Like Original) */}
+                    <div className="mt-4">
+                      <Button
+                        variant="outline"
+                        className="rounded-xl border-border bg-background text-foreground hover:bg-accent"
+                        onClick={() => generateDeepSummary(a)}
+                        disabled={deepLoading[a.id]}
+                      >
+                        {deepLoading[a.id] ? "Generating..." : "Deep Summary"}
+                      </Button>
 
-
- <div className="mt-3 flex flex-wrap gap-2">
-                              {a.tags.map((t) => (
-                                <Badge key={t} variant="outline" className="rounded-xl">
-                                  {t}
-                                </Badge>
-                              ))}
-                            </div>
-                          </div>
-
-                          <div className="flex shrink-0 flex-col items-end gap-2">
-                            <Button
-                              variant={selected ? "default" : "outline"}
-                              className="rounded-xl"
-                              onClick={() => toggleTopStory(a.id)}
-                            >
-                              {selected ? "Selected" : "Add to Top 5"}
-                            </Button>
-
-                            <Button
-                              variant="ghost"
-                              className="rounded-xl"
-                              onClick={() => window.open(a.url, "_blank")}
-                            >
-                              <ExternalLink size={16} className="mr-2" />
-                              Open
-                            </Button>
-
-                            <p className="text-xs text-muted-foreground">
-                              Selected: {selectedTopIds.size}/5
+                      {deepSummaries[a.id] && (
+                       <div className="mt-4 rounded-2xl border border-border bg-card/60 p-6 shadow-md backdrop-blur-md transition-all">
+                          <div className="mb-3 flex items-center justify-between">
+                            <p className="text-sm font-bold tracking-wide text-primary">
+                              Executive Brief
                             </p>
+                            <span className="text-xs text-slate-400 dark:text-slate-500">
+                              OpenAI
+                            </span>
                           </div>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  );
-                })}
-              </div>
-            </PageShell>
-          ) : null}
 
-          {activePage === "email" ? (
+                        <div className="space-y-4">
+
+{deepSummaries[a.id]
+  .split("\n")
+  .filter(line => line.trim() !== "")
+  .map((line, i) => {
+
+    const cleanLine = line.replace(/\*\*/g, "").trim().toLowerCase()
+
+    const isHeading =
+      cleanLine.startsWith("tl;dr") ||
+      cleanLine.startsWith("what happened") ||
+      cleanLine.startsWith("why it matters") ||
+      cleanLine.startsWith("what’s next") ||
+      cleanLine.startsWith("what's next")
+
+    if (isHeading) {
+      return (
+        <h4
+          key={i}
+          className="text-sm font-semibold text-primary border-l-4 border-primary pl-3 mt-2"
+        >
+          {line.replace(/\*\*/g, "")}
+        </h4>
+      )
+    }
+
+    return (
+      <p
+        key={i}
+        className="text-sm leading-6 text-muted-foreground pl-4"
+      >
+        {line}
+      </p>
+    )
+  })}
+
+</div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Tags */}
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {a.tags.map((t) => (
+                        <Badge key={t} variant="outline" className="rounded-xl">
+                          {t}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Right Side */}
+                  <div className="flex shrink-0 flex-col items-end gap-2">
+                    <Button
+                      variant={selected ? "default" : "outline"}
+                      className="rounded-xl"
+                      onClick={() => toggleTopStory(a.id)}
+                    >
+                      {selected ? "Selected" : "Add to Top 5"}
+                    </Button>
+
+                    <Button
+                      variant="ghost"
+                      className="rounded-xl"
+                      onClick={() => window.open(a.url, "_blank")}
+                    >
+                      <ExternalLink size={16} className="mr-2" />
+                      Open
+                    </Button>
+
+                    <p className="text-xs text-muted-foreground">
+                      Selected: {selectedTopIds.size}/5
+                    </p>
+                  </div>
+
+                </div>
+              </CardContent>
+            </Card>
+          );
+        })}
+
+      </div>
+    </div>
+
+  </PageShell>
+) : null}
+
+          {/* {activePage === "email" ? (
             <PageShell
               title="Email Preview"
               subtitle="Preview the top 5 stories and send them with summaries."
@@ -1085,7 +1262,7 @@ function SidebarContent() {
                 </CardContent>
               </Card>
             </PageShell>
-          ) : null}
+          ) : null} */}
 
           {activePage === "sources" ? (
             <PageShell
@@ -1099,24 +1276,74 @@ function SidebarContent() {
                 </CardHeader>
                 <CardContent className="space-y-3">
                   {DUMMY_SOURCES.map((s) => (
-                    <div
-                      key={s.id}
-                      className="flex items-center justify-between gap-3 rounded-xl border px-4 py-3"
-                    >
-                      <div>
-                        <p className="text-sm font-semibold">{s.name}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {s.type}
-                        </p>
-                      </div>
+                   <div
+  key={s.id}
+  className="rounded-xl border px-4 py-3 space-y-3"
+>
+  {/* Top Row */}
+  <div className="flex items-center justify-between gap-3">
+    <div>
+      <p className="text-sm font-semibold">{s.name}</p>
+      <p className="text-xs text-muted-foreground">
+        {s.type}
+      </p>
+    </div>
 
-                      <div className="flex items-center gap-3">
-                        {statusBadge(s.status)}
-                        <Button variant="outline" className="rounded-xl">
-                          Test
-                        </Button>
-                      </div>
-                    </div>
+    <div className="flex items-center gap-3">
+     {statusBadge(sourceHealth[s.name]?.status || s.status)}
+
+      <Button
+        variant="outline"
+        className="rounded-xl"
+        onClick={() => testSource(s.name)}
+      >
+        {testingSource === s.name ? "Testing..." : "Test"}
+      </Button>
+    </div>
+  </div>
+
+  {/* 🔥 HEALTH PANEL */}
+  {sourceHealth[s.name] && (
+    <div className="mt-2 text-xs space-y-1 text-muted-foreground rounded-lg bg-background/50 p-3 border">
+
+      <div>
+        Status:{" "}
+       {sourceHealth[s.name].status === "working" && "🟢 Working"}
+        {sourceHealth[s.name].status === "slow" && "🟡 Slow"}
+        {sourceHealth[s.name].status === "failed" && "🔴 Failed"}
+      </div>
+
+      {sourceHealth[s.name].latency_ms && (
+        <div>Latency: {sourceHealth[s.name].latency_ms} ms</div>
+      )}
+
+      {sourceHealth[s.name].articles_found && (
+        <div>Articles: {sourceHealth[s.name].articles_found}</div>
+      )}
+
+      {sourceHealth[s.name].latest_article_date && (
+        <div>Latest: {sourceHealth[s.name].latest_article_date}</div>
+      )}
+
+      {sourceHealth[s.name].preview_titles?.length > 0 && (
+        <div>
+          Top Headlines:
+          <ul className="list-disc ml-4 mt-1 space-y-1">
+            {sourceHealth[s.name].preview_titles.map((t, i) => (
+              <li key={i}>{t}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      <div className="opacity-60 text-[11px]">
+        Last Checked: {sourceHealth[s.name].last_checked}
+      </div>
+
+    </div>
+  )}
+
+</div>
                   ))}
                 </CardContent>
               </Card>
@@ -1148,7 +1375,9 @@ function SidebarContent() {
                         >
                           Open Results
                         </Button>
-                        <Button variant="outline" className="rounded-xl">
+                        <Button variant="outline" className="rounded-xl"
+                          onClick={exportHistory}
+                        >
                           Export
                         </Button>
                       </div>
@@ -1158,6 +1387,15 @@ function SidebarContent() {
               </div>
             </PageShell>
           ) : null}
+
+          {activePage === "ask" ? (
+  <PageShell
+    title="Ask AI"
+    subtitle="Ask questions about today's news and get instant insights."
+  >
+    <AskAIPage articles={filteredArticles} />
+  </PageShell>
+) : null}
         </main>
       </div>
     </div>
