@@ -16,6 +16,10 @@ import csv
 import time
 import feedparser
 
+
+import os
+import resend
+
 from services.processing_service import (
     filter_by_date_range,
     deduplicate_articles,
@@ -46,6 +50,7 @@ class ArticleSummaryRequest(BaseModel):
     snippet: str
 
 class ExportRequest(BaseModel):
+    recipient: str
     executive_summary: str | None = None
     articles: List[dict]
 
@@ -187,10 +192,17 @@ def deep_summary_url(payload: UrlSummaryRequest):
 
 
 # email export route
+# -----------------------------
+# Email export route (REAL SEND)
+# -----------------------------
+
 
 @app.post("/agent/export/email")
 def export_email(payload: ExportRequest):
 
+    resend.api_key = os.getenv("RESEND_API_KEY")
+
+    # ---------- Build HTML ----------
     html = """
     <html>
     <head>
@@ -226,7 +238,20 @@ def export_email(payload: ExportRequest):
 
     html += "</body></html>"
 
-    return {"html": html}
+    # ---------- SEND EMAIL ----------
+    try:
+        resend.Emails.send({
+            "from": "News Agent <onboarding@resend.dev>",  # change after domain setup
+            "to": payload.recipient,  # we will fix frontend next
+            "subject": "Your AI News Digest",
+            "html": html
+        })
+
+        return {"status": "Email sent successfully"}
+
+    except Exception as e:
+        print("EMAIL ERROR:", e)
+        return {"status": "Email failed", "error": str(e)}
 
 #csv export
 

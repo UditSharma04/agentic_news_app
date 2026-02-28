@@ -210,6 +210,7 @@ const [totalFetched, setTotalFetched] = useState(0);
 
 const [filtersOpen, setFiltersOpen] = useState(false);
 const CATEGORY_OPTIONS = ["Tech", "World", "Business", "Security", "Sports"];
+const [recipientEmail, setRecipientEmail] = useState("");
 
 const TAG_OPTIONS = [
   "AI",
@@ -234,7 +235,7 @@ const [executiveSummary, setExecutiveSummary] = useState("");
 
 const [deepSummaries, setDeepSummaries] = useState({});
 const [deepLoading, setDeepLoading] = useState({});
-const [darkMode, setDarkMode] = useState(false);
+const [darkMode, setDarkMode] = useState(true);
 const [sourceHealth, setSourceHealth] = useState({});
 const [testingSource, setTestingSource] = useState(null);
 
@@ -443,14 +444,15 @@ async function exportStories() {
     selectedTopIds.has(a.id)
   );
 
-  const res = await fetch("http://127.0.0.1:8000/agent/export/email", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      executive_summary: executiveSummary,
-      articles: selected
-    })
-  });
+const res = await fetch("http://127.0.0.1:8000/agent/export/email", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({
+    recipient: recipientEmail,   // NEW
+    executive_summary: executiveSummary,
+    articles: selected
+  })
+});
 
   const data = await res.json();
 
@@ -509,7 +511,40 @@ async function testSource(sourceName) {
   setTestingSource(null);
 }
 
+const handleSendEmail = async () => {
+  if (!recipientEmail) {
+    alert("Please enter recipient email");
+    return;
+  }
 
+  const selectedArticles = articles.filter((a) =>
+    selectedTopIds.has(a.id)
+  );
+
+  try {
+    const res = await fetch("http://127.0.0.1:8000/agent/export/email", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        recipient: recipientEmail,
+        executive_summary: executiveSummary,
+        articles: selectedArticles,
+      }),
+    });
+
+    const data = await res.json();
+    console.log("Email response:", data);
+
+    if (data.status === "Email sent successfully") {
+      alert("Email sent successfully!");
+    } else {
+      alert("Email failed.");
+    }
+  } catch (error) {
+    console.error("Send email error:", error);
+    alert("Something went wrong.");
+  }
+};
 function SidebarContent() {
   return (
     <div className="rounded-2xl border bg-card
@@ -541,12 +576,12 @@ function SidebarContent() {
           active={activePage === "stories"}
           onClick={() => setActivePage("stories")}
         />
-        {/* <SidebarItem
+        <SidebarItem
           icon={Mail}
           label="Email Preview"
           active={activePage === "email"}
           onClick={() => setActivePage("email")}
-        /> */}
+        /> 
         <SidebarItem
           icon={Globe}
           label="Sources"
@@ -581,58 +616,60 @@ function SidebarContent() {
 
   return (
     <div className="min-h-screen bg-background text-foreground">
-      <header className="sticky top-0 z-50 border-b border-border bg-white/70 backdrop-blur-md dark:bg-black/30">
-      <div className="mx-auto flex max-w-[1400px] items-center justify-between px-6 py-3">
-        {/* Left */}
-        <div className="flex items-center gap-3">
-          <div className="grid h-9 w-9 place-items-center rounded-xl bg-slate-900 text-white dark:bg-white dark:text-black">
-            <Sparkles size={18} />
-          </div>
+<header className="sticky top-0 z-50 border-b border-border bg-white/70 backdrop-blur-md dark:bg-black/30">
+  <div className="mx-auto max-w-[1400px] px-4 py-3">
 
-          <div>
-            <p className="text-sm font-semibold leading-none">
-              News Intelligence Agent
-            </p>
-            <p className="text-xs text-muted-foreground">
-              Executive News Workspace
-            </p>
-          </div>
+    {/* Top Row */}
+    <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+
+      {/* LEFT SECTION */}
+      <div className="flex items-center gap-3">
+        <div className="grid h-9 w-9 place-items-center rounded-xl bg-slate-900 text-white dark:bg-white dark:text-black">
+          <Sparkles size={18} />
         </div>
 
-        {/* Right */}
-        <div className="flex items-center gap-2">
-  {/* Date Range */}
-  <div className="rounded-xl border border-border bg-background/60 px-4 py-2 text-sm text-foreground shadow-sm backdrop-blur-md">
-    {formatDate(fromDate)} – {formatDate(toDate)}
-  </div>
-
-  {/* Theme Toggle */}
-  <Button
-    variant="outline"
-    className="h-10 rounded-xl border-border bg-background/60 px-4 text-foreground shadow-sm backdrop-blur-md hover:bg-accent"
-    onClick={() => setDarkMode((p) => !p)}
-  >
-    {darkMode ? (
-      <Sun size={16} className="mr-2" />
-    ) : (
-      <Moon size={16} className="mr-2" />
-    )}
-    {darkMode ? "Light" : "Dark"}
-  </Button>
-
-  {/* Export */}
-  <Button
-    variant="outline"
-    className="h-10 rounded-xl border-border bg-background/60 px-4 text-foreground shadow-sm backdrop-blur-md hover:bg-accent"
-     onClick={exportStories}
-  >
-    Export
-  </Button>
-</div>
-
-        
+        <div>
+          <p className="text-sm font-semibold leading-none">
+            News Intelligence Agent
+          </p>
+          <p className="text-xs text-muted-foreground">
+            Executive News Workspace
+          </p>
+        </div>
       </div>
-    </header>
+
+      {/* RIGHT SECTION */}
+      <div className="flex flex-col gap-3 md:flex-row md:items-center">
+
+        {/* Date Range */}
+        <div className="w-full md:w-auto rounded-xl border border-border bg-background/60 px-4 py-2 text-sm text-foreground shadow-sm backdrop-blur-md text-center">
+          {formatDate(fromDate)} – {formatDate(toDate)}
+        </div>
+
+        {/* Buttons Row */}
+        <div className="flex gap-2 justify-center md:justify-start">
+          <Button
+            variant="outline"
+            className="h-10 rounded-xl border-border bg-background/60 px-4 text-foreground shadow-sm backdrop-blur-md hover:bg-accent"
+            onClick={() => setDarkMode((p) => !p)}
+          >
+            {darkMode ? <Sun size={16} /> : <Moon size={16} />}
+          </Button>
+
+          <Button
+            variant="outline"
+            className="h-10 rounded-xl border-border bg-background/60 px-4 text-foreground shadow-sm backdrop-blur-md hover:bg-accent"
+            onClick={exportStories}
+          >
+            Export
+          </Button>
+        </div>
+
+      </div>
+
+    </div>
+  </div>
+</header>
     <div className="mx-auto flex max-w-[1400px] gap-6 px-4 sm:px-6 py-6 items-start">
 
         {/* Sidebar */}
@@ -1036,14 +1073,14 @@ function SidebarContent() {
         </div>
 
         {/* Email Button */}
-        {/* <Button
+         <Button
           className="rounded-xl"
           onClick={() => setActivePage("email")}
           disabled={selectedTopIds.size === 0}
         >
           Email Preview
           <ChevronRight className="ml-2" size={18} />
-        </Button> */}
+        </Button> 
       </div>
     </div>
 
@@ -1200,12 +1237,14 @@ function SidebarContent() {
   </PageShell>
 ) : null}
 
-          {/* {activePage === "email" ? (
+           {activePage === "email" ? (
             <PageShell
               title="Email Preview"
               subtitle="Preview the top 5 stories and send them with summaries."
               rightActions={
-                <Button className="rounded-xl">
+                <Button className="rounded-xl"
+                onClick={handleSendEmail}
+                >
                   <Send size={16} className="mr-2" />
                   Send Email
                 </Button>
@@ -1217,7 +1256,7 @@ function SidebarContent() {
                   <CardTitle className="text-base">Digest Email</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  <div className="rounded-xl border bg-slate-50 p-4">
+                  <div className="rounded-xl border  p-4">
                     <p className="text-sm font-medium">Subject</p>
                     <p className="mt-1 text-sm text-muted-foreground">
                       News Digest • {format(fromDate, "dd MMM")} –{" "}
@@ -1227,9 +1266,12 @@ function SidebarContent() {
 
                   <div className="rounded-xl border p-4">
                     <p className="text-sm font-medium">Recipient</p>
-                    <p className="mt-1 text-sm text-muted-foreground">
-                      your.email@company.com
-                    </p>
+                    <Input
+  type="email"
+  placeholder="Enter recipient email"
+  value={recipientEmail}
+  onChange={(e) => setRecipientEmail(e.target.value)}
+/>
                   </div>
 
                   <Separator />
@@ -1262,7 +1304,7 @@ function SidebarContent() {
                 </CardContent>
               </Card>
             </PageShell>
-          ) : null} */}
+          ) : null} 
 
           {activePage === "sources" ? (
             <PageShell
