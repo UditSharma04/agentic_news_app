@@ -1,5 +1,7 @@
 import AskAIPage from "./AskAIPage";
 
+const API_URL = "https://news-agent-fullstack-su-new.onrender.com";
+
 import { Menu } from "lucide-react";
 import {
   Sheet,
@@ -369,7 +371,7 @@ async function generateDeepSummary(article) {
   setDeepLoading((prev) => ({ ...prev, [id]: true }));
 
   try {
-   const res = await fetch("http://127.0.0.1:8000/agent/deep-summary-url", {
+   const res = await fetch(`${API_URL}/agent/deep-summary-url`, {
 
       method: "POST",
       headers: {
@@ -403,7 +405,7 @@ async function runAgentFake() {
   setAgentRunning(true);
 
   try {
-    const res = await fetch("http://127.0.0.1:8000/agent/run", {
+    const res = await fetch(`${API_URL}/agent/run`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -444,11 +446,11 @@ async function exportStories() {
     selectedTopIds.has(a.id)
   );
 
-const res = await fetch("http://127.0.0.1:8000/agent/export/email", {
+const res = await fetch(`${API_URL}/agent/export/email`, {
   method: "POST",
   headers: { "Content-Type": "application/json" },
   body: JSON.stringify({
-    recipient: recipientEmail,   // NEW
+    recipient: recipientEmail,
     executive_summary: executiveSummary,
     articles: selected
   })
@@ -461,7 +463,7 @@ const res = await fetch("http://127.0.0.1:8000/agent/export/email", {
 }
 // csv 
 async function exportHistory() {
-  const res = await fetch("http://127.0.0.1:8000/agent/export/csv", {
+  const res = await fetch(`${API_URL}/agent/export/csv`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -483,7 +485,7 @@ async function testSource(sourceName) {
   setTestingSource(sourceName);
 
   try {
-    const res = await fetch("http://127.0.0.1:8000/agent/test-source", {
+    const res = await fetch(`${API_URL}/agent/test-source`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -522,7 +524,7 @@ const handleSendEmail = async () => {
   );
 
   try {
-    const res = await fetch("http://127.0.0.1:8000/agent/export/email", {
+    const res = await fetch(`${API_URL}/agent/export/email`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({

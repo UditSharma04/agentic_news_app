@@ -2,6 +2,8 @@ import { useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 
+const API_URL = "https://news-agent-fullstack-su-new.onrender.com";
+
 export default function AskAIPage({ articles }) {
   const [question, setQuestion] = useState("");
   const [insight, setInsight] = useState("");
@@ -13,7 +15,7 @@ export default function AskAIPage({ articles }) {
 
     setLoading(true);
 
-    const res = await fetch("http://127.0.0.1:8000/agent/ask", {
+    const res = await fetch(`${API_URL}/agent/ask`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({

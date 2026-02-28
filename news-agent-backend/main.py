@@ -72,7 +72,11 @@ app = FastAPI(title="News Intelligence Agent API")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # later we will lock this down
+    allow_origins=[
+        "https://news-agent-fullstacksunew.vercel.app",
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+    ],
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
