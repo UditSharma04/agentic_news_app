@@ -1,6 +1,7 @@
 import AskAIPage from "./AskAIPage";
 
-const API_URL = "https://news-agent-fullstack-su-new.onrender.com";
+const API_URL = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
+console.log("API_URL:", API_URL);
 
 import { Menu } from "lucide-react";
 import {
